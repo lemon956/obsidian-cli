@@ -21,7 +21,7 @@ sudo install -m 0755 target/release/webdav-cli /usr/local/bin/webdav-cli
 
 - 手动触发：进入 GitHub 仓库的 `Actions` -> `Build webdav-cli binaries` -> `Run workflow`。
 - 分支触发：推送到 `main` 会构建并上传 workflow artifact。
-- tag 触发：推送 `v*` tag，例如 `git tag v0.1.0 && git push origin v0.1.0`，会构建并上传到对应 GitHub Release。
+- tag 触发：新建并推送 `v*` tag，例如 `git tag v0.1.0 && git push origin v0.1.0`，会构建并上传到对应 GitHub Release。workflow 需要先存在于默认分支 `main`。
 - 构建完成后，在 workflow run 的 Artifacts 下载 `webdav-cli-linux-x86_64`、`webdav-cli-macos` 或 `webdav-cli-windows-x86_64`。
 
 Linux 下载后安装：
