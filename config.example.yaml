@@ -1,0 +1,34 @@
+webdav:
+  base_url: https://example.com/obsidian-webdav/
+  username: hermes
+  password_env: OBSIDIAN_WEBDAV_PASSWORD
+  timeout: 30
+
+vault:
+  default_write_dir: Inbox/Hermes
+  timezone: Asia/Shanghai
+  filename_time_format: "%Y-%m-%d-%H%M%S"
+  default_tags:
+    - hermes
+    - inbox
+
+behavior:
+  allow_overwrite: false
+  allow_delete: false
+  allow_move: false
+  allow_write_dirs:
+    - Inbox/Hermes
+  readonly_dirs:
+    - Notes
+    - Projects
+    - Troubleshooting
+    - Index
+    - Daily
+    - Sources
+
+markdown:
+  frontmatter: true
+  heading_title: true
+  add_created_time: true
+  add_source: true
+  default_source: hermes

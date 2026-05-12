@@ -1,0 +1,4 @@
+interface:
+  display_name: "Obsidian WebDAV"
+  short_description: "Read/search Obsidian; write inbox notes safely"
+  default_prompt: "Use $obsidian-webdav to read, search, or save Obsidian notes safely through webdav-cli."

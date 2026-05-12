@@ -1,0 +1,34 @@
+[package]
+name = "obsidian-cli"
+version = "0.1.0"
+edition = "2024"
+description = "Safe Obsidian WebDAV CLI for Hermes and automation agents"
+license = "MIT"
+
+[lib]
+name = "obsidian_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "webdav-cli"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+clap = { version = "4.5", features = ["derive"] }
+percent-encoding = "2.3"
+quick-xml = "0.38"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+thiserror = "2.0"
+tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
+url = "2.5"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.23"
+wiremock = "0.6"

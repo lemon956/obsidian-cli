@@ -1,0 +1,37 @@
+# Rust build artifacts
+/target/
+/webdav-cli
+
+# Local runtime configuration
+/config.yaml
+/config.local.yaml
+/config.*.local.yaml
+
+# Local server configuration snapshots
+/nginx.conf
+*.htpasswd
+
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Agent/session-local metadata
+/.agents/
+/.codex/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*~
+
+# Editor and OS metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
