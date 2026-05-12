@@ -1,0 +1,83 @@
+name: Build webdav-cli binaries
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target_name: linux-x86_64
+            os: ubuntu-latest
+            executable: target/release/webdav-cli
+            archive: webdav-cli-linux-x86_64.tar.gz
+          - target_name: macos
+            os: macos-latest
+            executable: target/release/webdav-cli
+            archive: webdav-cli-macos.tar.gz
+          - target_name: windows-x86_64
+            os: windows-latest
+            executable: target/release/webdav-cli.exe
+            archive: webdav-cli-windows-x86_64.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Build release binary
+        run: cargo build --locked --release
+
+      - name: Package Unix binary
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          chmod +x "${{ matrix.executable }}"
+          tar -czf "dist/${{ matrix.archive }}" -C target/release webdav-cli
+          shasum -a 256 "dist/${{ matrix.archive }}" > "dist/${{ matrix.archive }}.sha256"
+
+      - name: Package Windows binary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path "${{ matrix.executable }}" -DestinationPath "dist/${{ matrix.archive }}" -Force
+          $hash = Get-FileHash "dist/${{ matrix.archive }}" -Algorithm SHA256
+          "$($hash.Hash.ToLower())  ${{ matrix.archive }}" | Out-File -Encoding ascii "dist/${{ matrix.archive }}.sha256"
+
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: webdav-cli-${{ matrix.target_name }}
+          path: |
+            dist/${{ matrix.archive }}
+            dist/${{ matrix.archive }}.sha256
+          if-no-files-found: error
+          retention-days: 30

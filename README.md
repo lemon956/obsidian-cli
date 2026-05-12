@@ -17,6 +17,19 @@ cargo build --release
 sudo install -m 0755 target/release/webdav-cli /usr/local/bin/webdav-cli
 ```
 
+也可以通过 GitHub Actions 生成可执行文件：
+
+- 手动触发：进入 GitHub 仓库的 `Actions` -> `Build webdav-cli binaries` -> `Run workflow`。
+- tag 触发：推送 `v*` tag，例如 `git tag v0.1.0 && git push origin v0.1.0`。
+- 构建完成后，在 workflow run 的 Artifacts 下载 `webdav-cli-linux-x86_64`、`webdav-cli-macos` 或 `webdav-cli-windows-x86_64`。
+
+Linux 下载后安装：
+
+```bash
+tar -xzf webdav-cli-linux-x86_64.tar.gz
+sudo install -m 0755 webdav-cli /usr/local/bin/webdav-cli
+```
+
 初始化配置：
 
 ```bash
