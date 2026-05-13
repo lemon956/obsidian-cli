@@ -158,7 +158,7 @@ webdav-cli cat Notes/Hermes.md --body
 1. 使用 webdav-cli new 创建笔记。
 2. 默认写入 Inbox/Hermes/。
 3. 不要尝试写入 Notes/、Projects/、Index/ 等正式目录。
-4. 不要删除、移动、覆盖任何笔记。
+4. 删除、移动、复制、属性和锁操作只能通过 webdav-cli 在 Inbox/Hermes/ 内执行；delete/move 还需要配置开关允许。
 5. 标题应简洁明确。
 6. 正文使用 Markdown。
 7. 技术排查类内容使用 troubleshooting 模板。

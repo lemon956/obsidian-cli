@@ -20,6 +20,12 @@ pub enum Commands {
     Search(SearchArgs),
     New(NewArgs),
     Mkdir(MkdirArgs),
+    Delete(DeleteArgs),
+    Move(MoveArgs),
+    Copy(CopyArgs),
+    Proppatch(ProppatchArgs),
+    Lock(LockArgs),
+    Unlock(UnlockArgs),
 }
 
 #[derive(Debug, Args)]
@@ -92,6 +98,12 @@ impl Cli {
             Commands::Search(args) => args.json,
             Commands::New(args) => args.json,
             Commands::Mkdir(args) => args.json,
+            Commands::Delete(args) => args.json,
+            Commands::Move(args) => args.json,
+            Commands::Copy(args) => args.json,
+            Commands::Proppatch(args) => args.json,
+            Commands::Lock(args) => args.json,
+            Commands::Unlock(args) => args.json,
             Commands::Init(_) | Commands::Cat(_) => false,
         }
     }
@@ -135,6 +147,76 @@ pub struct MkdirArgs {
     pub path: String,
     #[arg(short = 'p', long)]
     pub parents: bool,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct DeleteArgs {
+    pub path: String,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct MoveArgs {
+    pub source: String,
+    pub dest: String,
+    #[arg(long)]
+    pub overwrite: bool,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct CopyArgs {
+    pub source: String,
+    pub dest: String,
+    #[arg(long)]
+    pub overwrite: bool,
+    #[arg(long, default_value = "infinity", value_parser = ["0", "infinity"])]
+    pub depth: String,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+#[command(group(
+    clap::ArgGroup::new("proppatch_xml")
+        .args(["xml", "xml_file"])
+        .required(true)
+        .multiple(false)
+))]
+pub struct ProppatchArgs {
+    pub path: String,
+    #[arg(long)]
+    pub xml: Option<String>,
+    #[arg(long = "xml-file", value_name = "PATH")]
+    pub xml_file: Option<String>,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct LockArgs {
+    pub path: String,
+    #[arg(long, default_value = "exclusive", value_parser = ["exclusive", "shared"])]
+    pub scope: String,
+    #[arg(long)]
+    pub owner: Option<String>,
+    #[arg(long, default_value = "infinite")]
+    pub timeout: String,
+    #[arg(long, default_value = "0", value_parser = ["0", "infinity"])]
+    pub depth: String,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct UnlockArgs {
+    pub path: String,
+    #[arg(long)]
+    pub token: String,
     #[arg(long)]
     pub json: bool,
 }

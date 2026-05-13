@@ -84,6 +84,25 @@ webdav-cli mkdir -p Inbox/Hermes/topic/deep
 
 Do not create directories outside the configured write allowlist.
 
+## Controlled Inbox Operations
+
+All paths must stay inside `allow_write_dirs`, normally `Inbox/Hermes`.
+
+```bash
+webdav-cli copy Inbox/Hermes/a.md Inbox/Hermes/b.md
+webdav-cli copy Inbox/Hermes/a.md Inbox/Hermes/b.md --depth 0 --overwrite
+webdav-cli proppatch Inbox/Hermes/a.md --xml '<propertyupdate />'
+webdav-cli lock Inbox/Hermes/a.md --owner hermes --timeout 120
+webdav-cli unlock Inbox/Hermes/a.md --token 'opaquelocktoken:123'
+```
+
+Only run these when the config explicitly enables them:
+
+```bash
+webdav-cli delete Inbox/Hermes/old.md
+webdav-cli move Inbox/Hermes/old.md Inbox/Hermes/new.md --overwrite
+```
+
 ## JSON Mode
 
 Use JSON only for machine parsing:
@@ -92,5 +111,11 @@ Use JSON only for machine parsing:
 webdav-cli ls --json
 webdav-cli search "query" --json
 webdav-cli new --title "Title" --body "Body" --json
+webdav-cli delete Inbox/Hermes/old.md --json
+webdav-cli move Inbox/Hermes/old.md Inbox/Hermes/new.md --json
+webdav-cli copy Inbox/Hermes/a.md Inbox/Hermes/b.md --json
+webdav-cli proppatch Inbox/Hermes/a.md --xml '<propertyupdate />' --json
+webdav-cli lock Inbox/Hermes/a.md --json
+webdav-cli unlock Inbox/Hermes/a.md --token 'opaquelocktoken:123' --json
 webdav-cli doctor --json
 ```

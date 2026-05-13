@@ -46,8 +46,6 @@ pub enum CommandError {
     InvalidArgs(String),
     #[error("file already exists: {0}")]
     FileAlreadyExists(String),
-    #[error("command is not implemented yet: {0}")]
-    NotImplemented(&'static str),
 }
 
 pub async fn run_command(cli: Cli, stdin: &str) -> Result<CommandOutput, CommandError> {
@@ -223,6 +221,160 @@ pub async fn run_command(cli: Cli, stdin: &str) -> Result<CommandOutput, Command
                 },
             })
         }
+        Commands::Delete(args) => {
+            let path = config_path_from_cli(cli.config.as_deref(), None)?;
+            let config = load_config(&path)?;
+            if !config.behavior.allow_delete {
+                return Err(CommandError::InvalidArgs(
+                    "delete requires behavior.allow_delete = true".to_string(),
+                ));
+            }
+            let client = client_from_config(config.clone())?;
+            let target = operation_path_allowed(&args.path, &config)?;
+            client.delete(&target).await?;
+
+            Ok(CommandOutput {
+                message: if args.json {
+                    json!({
+                        "ok": true,
+                        "action": "deleted",
+                        "path": target,
+                    })
+                    .to_string()
+                } else {
+                    format!("Deleted: {target}")
+                },
+            })
+        }
+        Commands::Move(args) => {
+            let path = config_path_from_cli(cli.config.as_deref(), None)?;
+            let config = load_config(&path)?;
+            if !config.behavior.allow_move {
+                return Err(CommandError::InvalidArgs(
+                    "move requires behavior.allow_move = true".to_string(),
+                ));
+            }
+            let client = client_from_config(config.clone())?;
+            let source = operation_path_allowed(&args.source, &config)?;
+            let dest = operation_path_allowed(&args.dest, &config)?;
+            client.move_path(&source, &dest, args.overwrite).await?;
+
+            Ok(CommandOutput {
+                message: if args.json {
+                    json!({
+                        "ok": true,
+                        "action": "moved",
+                        "source": source,
+                        "dest": dest,
+                    })
+                    .to_string()
+                } else {
+                    format!("Moved: {source} -> {dest}")
+                },
+            })
+        }
+        Commands::Copy(args) => {
+            let path = config_path_from_cli(cli.config.as_deref(), None)?;
+            let config = load_config(&path)?;
+            let client = client_from_config(config.clone())?;
+            let source = operation_path_allowed(&args.source, &config)?;
+            let dest = operation_path_allowed(&args.dest, &config)?;
+            client
+                .copy_path(&source, &dest, args.overwrite, &args.depth)
+                .await?;
+
+            Ok(CommandOutput {
+                message: if args.json {
+                    json!({
+                        "ok": true,
+                        "action": "copied",
+                        "source": source,
+                        "dest": dest,
+                    })
+                    .to_string()
+                } else {
+                    format!("Copied: {source} -> {dest}")
+                },
+            })
+        }
+        Commands::Proppatch(args) => {
+            let path = config_path_from_cli(cli.config.as_deref(), None)?;
+            let config = load_config(&path)?;
+            let client = client_from_config(config.clone())?;
+            let target = operation_path_allowed(&args.path, &config)?;
+            let xml = proppatch_xml(args.xml.as_deref(), args.xml_file.as_deref())?;
+            client.proppatch(&target, &xml).await?;
+
+            Ok(CommandOutput {
+                message: if args.json {
+                    json!({
+                        "ok": true,
+                        "action": "proppatched",
+                        "path": target,
+                    })
+                    .to_string()
+                } else {
+                    format!("Updated properties: {target}")
+                },
+            })
+        }
+        Commands::Lock(args) => {
+            let path = config_path_from_cli(cli.config.as_deref(), None)?;
+            let config = load_config(&path)?;
+            let client = client_from_config(config.clone())?;
+            let target = operation_path_allowed(&args.path, &config)?;
+            let timeout = validated_lock_timeout(&args.timeout)?;
+            let lock = client
+                .lock(
+                    &target,
+                    &args.scope,
+                    args.owner.as_deref(),
+                    &timeout,
+                    &args.depth,
+                )
+                .await?;
+
+            Ok(CommandOutput {
+                message: if args.json {
+                    json!({
+                        "ok": true,
+                        "action": "locked",
+                        "path": target,
+                        "lock_token": lock.lock_token,
+                        "body": lock.body,
+                    })
+                    .to_string()
+                } else {
+                    let token = lock.lock_token.unwrap_or_else(|| "<none>".to_string());
+                    format!("Locked: {target}\nLock-Token: {token}")
+                },
+            })
+        }
+        Commands::Unlock(args) => {
+            let path = config_path_from_cli(cli.config.as_deref(), None)?;
+            let config = load_config(&path)?;
+            let client = client_from_config(config.clone())?;
+            let target = operation_path_allowed(&args.path, &config)?;
+            if args.token.trim().is_empty() {
+                return Err(CommandError::InvalidArgs(
+                    "unlock requires a non-empty token".to_string(),
+                ));
+            }
+            client.unlock(&target, &args.token).await?;
+
+            Ok(CommandOutput {
+                message: if args.json {
+                    json!({
+                        "ok": true,
+                        "action": "unlocked",
+                        "path": target,
+                    })
+                    .to_string()
+                } else {
+                    format!("Unlocked: {target}")
+                },
+            })
+        }
     }
 }
 
@@ -268,6 +420,40 @@ fn client_from_config(config: AppConfig) -> Result<WebdavClient, CommandError> {
         password,
         timeout_secs: config.webdav.timeout,
     })?)
+}
+
+fn operation_path_allowed(raw: &str, config: &AppConfig) -> Result<String, CommandError> {
+    Ok(
+        crate::pathguard::assert_write_allowed(raw, &config.behavior.allow_write_dirs)?
+            .into_string(),
+    )
+}
+
+fn proppatch_xml(xml: Option<&str>, xml_file: Option<&str>) -> Result<String, CommandError> {
+    if let Some(xml) = xml {
+        return Ok(xml.to_string());
+    }
+
+    let Some(path) = xml_file else {
+        return Err(CommandError::InvalidArgs(
+            "proppatch requires --xml or --xml-file".to_string(),
+        ));
+    };
+    std::fs::read_to_string(path)
+        .map_err(|err| CommandError::InvalidArgs(format!("failed to read XML file {path}: {err}")))
+}
+
+fn validated_lock_timeout(timeout: &str) -> Result<String, CommandError> {
+    let trimmed = timeout.trim();
+    if trimmed.eq_ignore_ascii_case("infinite") {
+        return Ok("infinite".to_string());
+    }
+    if trimmed.parse::<u64>().is_ok_and(|seconds| seconds > 0) {
+        return Ok(trimmed.to_string());
+    }
+    Err(CommandError::InvalidArgs(
+        "lock timeout must be \"infinite\" or a positive integer".to_string(),
+    ))
 }
 
 fn format_ls(requested: &str, entries: Vec<DavEntry>) -> String {
@@ -608,7 +794,6 @@ impl CommandError {
             CommandError::Markdown(_) => "markdown_error",
             CommandError::InvalidArgs(_) => "invalid_args",
             CommandError::FileAlreadyExists(_) => "file_already_exists",
-            CommandError::NotImplemented(_) => "not_implemented",
         }
     }
 }

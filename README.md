@@ -6,7 +6,7 @@
 
 - 可以读取整个 Obsidian Vault。
 - 可以列目录、读笔记、搜索 Markdown。
-- 默认只能向 `Inbox/Hermes` 写入新笔记。
+- 默认只能在 `Inbox/Hermes` 范围内写入和执行受控 WebDAV 管理操作。
 - 服务端受限入口需要给 `Inbox/Hermes` 完整 HTTP/WebDAV 方法权限。
 - 默认不覆盖、不删除、不移动、不重命名正式笔记。
 - 生成带 YAML frontmatter 的 Obsidian Markdown。
@@ -22,7 +22,7 @@ sudo install -m 0755 target/release/webdav-cli /usr/local/bin/webdav-cli
 
 - 手动触发：进入 GitHub 仓库的 `Actions` -> `Build webdav-cli binaries` -> `Run workflow`。
 - 分支触发：推送到 `main` 会构建并上传 workflow artifact。
-- tag 触发：新建并推送 `v*` tag，例如 `git tag v0.1.0 && git push origin v0.1.0`，会构建并上传到对应 GitHub Release。workflow 需要先存在于默认分支 `main`。
+- tag 触发：新建并推送 `v*` tag，例如 `git tag v0.1.3 && git push origin v0.1.3`，会构建并上传到对应 GitHub Release。workflow 需要先存在于默认分支 `main`。
 - 构建完成后，在 workflow run 的 Artifacts 下载 `webdav-cli-linux-x86_64`、`webdav-cli-macos` 或 `webdav-cli-windows-x86_64`。
 
 Linux 下载后安装：
@@ -103,6 +103,17 @@ webdav-cli mkdir -p Inbox/Hermes/debug/deep
 
 `mkdir -p` 只会从允许写入目录内部开始逐级创建，不会尝试创建或修改 `Inbox` 这类上级目录。
 
+受控 WebDAV 方法命令仅允许操作 `allow_write_dirs` 内路径。`delete` 需要 `behavior.allow_delete: true`，`move` 需要 `behavior.allow_move: true`：
+
+```bash
+webdav-cli delete Inbox/Hermes/old.md
+webdav-cli move Inbox/Hermes/old.md Inbox/Hermes/new.md --overwrite
+webdav-cli copy Inbox/Hermes/a.md Inbox/Hermes/b.md --depth 0
+webdav-cli proppatch Inbox/Hermes/a.md --xml '<propertyupdate />'
+webdav-cli lock Inbox/Hermes/a.md --owner hermes
+webdav-cli unlock Inbox/Hermes/a.md --token 'opaquelocktoken:123'
+```
+
 `doctor` 会检查配置、WebDAV 连接、根目录读取、默认写入目录存在、`Inbox/Hermes` 完整 HTTP/WebDAV 方法权限、默认写入目录可写，以及正式目录只读。如需跳过写入探测：
 
 ```bash
@@ -118,6 +129,12 @@ webdav-cli ls --json
 webdav-cli search "Hermes" --json
 webdav-cli new --title "测试" --body "hello" --json
 webdav-cli mkdir Inbox/Hermes/debug --json
+webdav-cli delete Inbox/Hermes/old.md --json
+webdav-cli move Inbox/Hermes/old.md Inbox/Hermes/new.md --json
+webdav-cli copy Inbox/Hermes/a.md Inbox/Hermes/b.md --json
+webdav-cli proppatch Inbox/Hermes/a.md --xml '<propertyupdate />' --json
+webdav-cli lock Inbox/Hermes/a.md --json
+webdav-cli unlock Inbox/Hermes/a.md --token 'opaquelocktoken:123' --json
 webdav-cli doctor --json
 ```
 
@@ -141,4 +158,4 @@ webdav-cli doctor --json
 
 ## 安全原则
 
-`webdav-cli` 不提供普通 `delete`、`move`、`sync` 命令。所有写操作都会经过路径校验，默认只允许写入 `Inbox/Hermes`。
+`webdav-cli` 不提供 `sync` 命令。所有写入、删除、移动、复制和属性/锁操作都会经过路径校验，只允许作用于 `allow_write_dirs`；默认配置只允许 `Inbox/Hermes`。`delete` 和 `move` 还需要分别显式开启 `allow_delete` 和 `allow_move`。

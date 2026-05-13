@@ -33,6 +33,12 @@ pub struct DavEntry {
     pub is_dir: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LockResult {
+    pub lock_token: Option<String>,
+    pub body: String,
+}
+
 #[derive(Debug, Error)]
 pub enum WebdavError {
     #[error("invalid WebDAV base URL: {0}")]
@@ -151,6 +157,102 @@ impl WebdavClient {
         Ok(true)
     }
 
+    pub async fn delete(&self, raw_path: &str) -> Result<(), WebdavError> {
+        let url = self.url_for(raw_path, false)?;
+        let response = self.request(Method::DELETE, url).send().await?;
+        ensure_success(response.status(), "DELETE")?;
+        Ok(())
+    }
+
+    pub async fn move_path(
+        &self,
+        source_path: &str,
+        dest_path: &str,
+        overwrite: bool,
+    ) -> Result<(), WebdavError> {
+        let source_url = self.url_for(source_path, false)?;
+        let dest_url = self.url_for(dest_path, false)?;
+        let response = self
+            .request(custom_method("MOVE"), source_url)
+            .header("Destination", dest_url.to_string())
+            .header("Overwrite", overwrite_header(overwrite))
+            .send()
+            .await?;
+        ensure_success(response.status(), "MOVE")?;
+        Ok(())
+    }
+
+    pub async fn copy_path(
+        &self,
+        source_path: &str,
+        dest_path: &str,
+        overwrite: bool,
+        depth: &str,
+    ) -> Result<(), WebdavError> {
+        let source_url = self.url_for(source_path, false)?;
+        let dest_url = self.url_for(dest_path, false)?;
+        let response = self
+            .request(custom_method("COPY"), source_url)
+            .header("Destination", dest_url.to_string())
+            .header("Overwrite", overwrite_header(overwrite))
+            .header("Depth", depth)
+            .send()
+            .await?;
+        ensure_success(response.status(), "COPY")?;
+        Ok(())
+    }
+
+    pub async fn proppatch(&self, raw_path: &str, xml: &str) -> Result<(), WebdavError> {
+        let url = self.url_for(raw_path, false)?;
+        let response = self
+            .request(custom_method("PROPPATCH"), url)
+            .header("Content-Type", "application/xml")
+            .body(xml.to_string())
+            .send()
+            .await?;
+        ensure_success(response.status(), "PROPPATCH")?;
+        Ok(())
+    }
+
+    pub async fn lock(
+        &self,
+        raw_path: &str,
+        scope: &str,
+        owner: Option<&str>,
+        timeout: &str,
+        depth: &str,
+    ) -> Result<LockResult, WebdavError> {
+        let url = self.url_for(raw_path, false)?;
+        let body = lock_body(scope, owner);
+        let response = self
+            .request(custom_method("LOCK"), url)
+            .header("Content-Type", "application/xml")
+            .header("Depth", depth)
+            .header("Timeout", lock_timeout_header(timeout))
+            .body(body)
+            .send()
+            .await?;
+        ensure_success(response.status(), "LOCK")?;
+        let lock_token = response
+            .headers()
+            .get("Lock-Token")
+            .and_then(|value| value.to_str().ok())
+            .map(ToString::to_string);
+        let body = response.text().await?;
+        Ok(LockResult { lock_token, body })
+    }
+
+    pub async fn unlock(&self, raw_path: &str, token: &str) -> Result<(), WebdavError> {
+        let url = self.url_for(raw_path, false)?;
+        let response = self
+            .request(custom_method("UNLOCK"), url)
+            .header("Lock-Token", normalize_lock_token(token))
+            .send()
+            .await?;
+        ensure_success(response.status(), "UNLOCK")?;
+        Ok(())
+    }
+
     pub async fn options_allow(
         &self,
         raw_path: &str,
@@ -170,12 +272,6 @@ impl WebdavClient {
             .map(|method| method.trim().to_ascii_uppercase())
             .filter(|method| !method.is_empty())
             .collect())
-    }
-
-    pub async fn delete_status(&self, raw_path: &str) -> Result<StatusCode, WebdavError> {
-        let url = self.url_for(raw_path, false)?;
-        let response = self.request(Method::DELETE, url).send().await?;
-        Ok(response.status())
     }
 
     fn request(&self, method: Method, url: Url) -> reqwest::RequestBuilder {
@@ -248,6 +344,52 @@ impl WebdavClient {
             is_dir,
         }))
     }
+}
+
+fn overwrite_header(overwrite: bool) -> &'static str {
+    if overwrite { "T" } else { "F" }
+}
+
+fn lock_timeout_header(timeout: &str) -> String {
+    if timeout.eq_ignore_ascii_case("infinite") {
+        "Infinite".to_string()
+    } else if timeout.to_ascii_lowercase().starts_with("second-") {
+        timeout.to_string()
+    } else {
+        format!("Second-{timeout}")
+    }
+}
+
+fn normalize_lock_token(token: &str) -> String {
+    let trimmed = token.trim();
+    if trimmed.starts_with('<') && trimmed.ends_with('>') {
+        trimmed.to_string()
+    } else {
+        format!("<{trimmed}>")
+    }
+}
+
+fn lock_body(scope: &str, owner: Option<&str>) -> String {
+    let scope = if scope.eq_ignore_ascii_case("shared") {
+        "shared"
+    } else {
+        "exclusive"
+    };
+    let owner = owner
+        .map(|owner| format!("<d:owner>{}</d:owner>", escape_xml(owner)))
+        .unwrap_or_default();
+    format!(
+        r#"<?xml version="1.0" encoding="utf-8"?><d:lockinfo xmlns:d="DAV:"><d:lockscope><d:{scope}/></d:lockscope><d:locktype><d:write/></d:locktype>{owner}</d:lockinfo>"#
+    )
+}
+
+fn escape_xml(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }
 
 fn custom_method(method: &'static str) -> Method {

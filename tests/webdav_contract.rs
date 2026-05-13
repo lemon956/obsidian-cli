@@ -1,5 +1,5 @@
 use obsidian_cli::webdav::{DavEntry, WebdavClient, WebdavSettings};
-use wiremock::matchers::{body_string, header_exists, method, path};
+use wiremock::matchers::{body_string, body_string_contains, header, header_exists, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn settings(server: &MockServer) -> WebdavSettings {
@@ -88,17 +88,12 @@ async fn get_put_mkcol_and_head_use_expected_http_methods() {
 }
 
 #[tokio::test]
-async fn options_and_delete_probe_return_diagnostic_status() {
+async fn options_allow_returns_declared_methods() {
     let server = MockServer::start().await;
 
     Mock::given(method("OPTIONS"))
         .and(path("/webdav/Notes/"))
         .respond_with(ResponseTemplate::new(204).insert_header("Allow", "GET, HEAD, PROPFIND"))
-        .mount(&server)
-        .await;
-    Mock::given(method("DELETE"))
-        .and(path("/webdav/Inbox/Hermes/.webdav-cli-delete-probe.md"))
-        .respond_with(ResponseTemplate::new(405))
         .mount(&server)
         .await;
 
@@ -108,12 +103,90 @@ async fn options_and_delete_probe_return_diagnostic_status() {
         client.options_allow("Notes", true).await.unwrap(),
         vec!["GET", "HEAD", "PROPFIND"]
     );
-    assert_eq!(
-        client
-            .delete_status("Inbox/Hermes/.webdav-cli-delete-probe.md")
-            .await
-            .unwrap()
-            .as_u16(),
-        405
-    );
+}
+
+#[tokio::test]
+async fn extended_webdav_methods_use_expected_requests() {
+    let server = MockServer::start().await;
+    let destination = format!("{}/webdav/Inbox/Hermes/dest.md", server.uri());
+
+    Mock::given(method("DELETE"))
+        .and(path("/webdav/Inbox/Hermes/delete.md"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+    Mock::given(method("MOVE"))
+        .and(path("/webdav/Inbox/Hermes/source.md"))
+        .and(header("Destination", destination.as_str()))
+        .and(header("Overwrite", "T"))
+        .respond_with(ResponseTemplate::new(201))
+        .mount(&server)
+        .await;
+    Mock::given(method("COPY"))
+        .and(path("/webdav/Inbox/Hermes/source.md"))
+        .and(header("Destination", destination.as_str()))
+        .and(header("Overwrite", "F"))
+        .and(header("Depth", "0"))
+        .respond_with(ResponseTemplate::new(201))
+        .mount(&server)
+        .await;
+    Mock::given(method("PROPPATCH"))
+        .and(path("/webdav/Inbox/Hermes/meta.md"))
+        .and(header("Content-Type", "application/xml"))
+        .and(body_string("<propertyupdate />"))
+        .respond_with(ResponseTemplate::new(207))
+        .mount(&server)
+        .await;
+    Mock::given(method("LOCK"))
+        .and(path("/webdav/Inbox/Hermes/lock.md"))
+        .and(header("Depth", "infinity"))
+        .and(header("Timeout", "Second-120"))
+        .and(header("Content-Type", "application/xml"))
+        .and(body_string_contains("<d:shared/>"))
+        .and(body_string_contains("<d:owner>hermes</d:owner>"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Lock-Token", "<opaquelocktoken:123>")
+                .set_body_string("<prop>locked</prop>"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("UNLOCK"))
+        .and(path("/webdav/Inbox/Hermes/lock.md"))
+        .and(header("Lock-Token", "<opaquelocktoken:123>"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+
+    let client = WebdavClient::new(settings(&server)).unwrap();
+
+    client.delete("Inbox/Hermes/delete.md").await.unwrap();
+    client
+        .move_path("Inbox/Hermes/source.md", "Inbox/Hermes/dest.md", true)
+        .await
+        .unwrap();
+    client
+        .copy_path("Inbox/Hermes/source.md", "Inbox/Hermes/dest.md", false, "0")
+        .await
+        .unwrap();
+    client
+        .proppatch("Inbox/Hermes/meta.md", "<propertyupdate />")
+        .await
+        .unwrap();
+    let lock = client
+        .lock(
+            "Inbox/Hermes/lock.md",
+            "shared",
+            Some("hermes"),
+            "120",
+            "infinity",
+        )
+        .await
+        .unwrap();
+    assert_eq!(lock.lock_token.as_deref(), Some("<opaquelocktoken:123>"));
+    assert_eq!(lock.body, "<prop>locked</prop>");
+    client
+        .unlock("Inbox/Hermes/lock.md", "opaquelocktoken:123")
+        .await
+        .unwrap();
 }

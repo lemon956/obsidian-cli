@@ -504,18 +504,14 @@ behavior:
 
 ---
 
-### 默认禁止删除
+### 删除仅限 Inbox/Hermes
 
-不提供普通删除命令。
-
-如果未来需要删除，只能删除 `Inbox/Hermes/` 下的文件，并要求显式开启：
+只能删除 `Inbox/Hermes/` 下的文件，并要求显式开启：
 
 ```yaml
 behavior:
   allow_delete: false
 ```
-
-默认不实现：
 
 ```bash
 obsidian-cli delete
@@ -523,9 +519,14 @@ obsidian-cli delete
 
 ---
 
-### 默认禁止移动
+### 移动仅限 Inbox/Hermes
 
-不提供默认移动正式笔记的能力。
+不提供移动正式笔记的能力。`move` 的 source/dest 都必须位于 `Inbox/Hermes/`，并要求显式开启：
+
+```yaml
+behavior:
+  allow_move: false
+```
 
 原因：
 
@@ -721,13 +722,17 @@ obsidian-cli search <query>
 obsidian-cli new --title <title> [--body <body>]
 obsidian-cli new --title <title> < stdin
 obsidian-cli mkdir Inbox/Hermes/subdir
+obsidian-cli delete
+obsidian-cli move
+obsidian-cli copy
+obsidian-cli proppatch
+obsidian-cli lock
+obsidian-cli unlock
 ```
 
 暂不实现：
 
 ```text
-obsidian-cli delete
-obsidian-cli move
 obsidian-cli sync
 obsidian-cli overwrite
 ```
