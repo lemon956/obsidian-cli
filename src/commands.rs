@@ -8,10 +8,24 @@ use crate::pathguard::{PathError, normalize_vault_path};
 use crate::webdav::{DavEntry, WebdavClient, WebdavError, WebdavSettings};
 use chrono::Utc;
 use chrono_tz::Tz;
-use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};
 use thiserror::Error;
+
+const FULL_HTTP_METHODS: &[&str] = &[
+    "GET",
+    "HEAD",
+    "OPTIONS",
+    "PROPFIND",
+    "PUT",
+    "MKCOL",
+    "DELETE",
+    "MOVE",
+    "COPY",
+    "PROPPATCH",
+    "LOCK",
+    "UNLOCK",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandOutput {
@@ -494,6 +508,22 @@ async fn run_doctor(
         ok: true,
     });
 
+    let write_allow = client
+        .options_allow(&config.vault.default_write_dir, true)
+        .await?;
+    let missing_write_methods = missing_methods(&write_allow, FULL_HTTP_METHODS);
+    if !missing_write_methods.is_empty() {
+        return Err(CommandError::InvalidArgs(format!(
+            "{} lacks full HTTP permissions; missing: {}",
+            config.vault.default_write_dir,
+            missing_write_methods.join(", ")
+        )));
+    }
+    checks.push(DoctorCheck {
+        name: format!("{} full HTTP permissions", config.vault.default_write_dir),
+        ok: true,
+    });
+
     if no_write_test {
         checks.push(DoctorCheck {
             name: "Write test skipped".to_string(),
@@ -529,21 +559,6 @@ async fn run_doctor(
         });
     }
 
-    let delete_probe = format!(
-        "{}/.webdav-cli-doctor-delete-probe.md",
-        trim_slash(&config.vault.default_write_dir)
-    );
-    let delete_status = client.delete_status(&delete_probe).await?;
-    if !is_delete_forbidden(delete_status) {
-        return Err(CommandError::InvalidArgs(format!(
-            "DELETE is not forbidden; server returned {delete_status}"
-        )));
-    }
-    checks.push(DoctorCheck {
-        name: "DELETE forbidden".to_string(),
-        ok: true,
-    });
-
     if json_output {
         Ok(CommandOutput {
             message: json!({
@@ -564,6 +579,14 @@ async fn run_doctor(
     }
 }
 
+fn missing_methods(allow: &[String], required: &[&str]) -> Vec<String> {
+    required
+        .iter()
+        .filter(|method| !allow.iter().any(|allowed| allowed == **method))
+        .map(|method| (*method).to_string())
+        .collect()
+}
+
 fn contains_write_or_destructive_method(allow: &[String]) -> bool {
     allow.iter().any(|method| {
         matches!(
@@ -571,13 +594,6 @@ fn contains_write_or_destructive_method(allow: &[String]) -> bool {
             "PUT" | "MKCOL" | "DELETE" | "MOVE" | "COPY" | "PROPPATCH" | "LOCK" | "UNLOCK"
         )
     })
-}
-
-fn is_delete_forbidden(status: StatusCode) -> bool {
-    matches!(
-        status,
-        StatusCode::FORBIDDEN | StatusCode::METHOD_NOT_ALLOWED | StatusCode::NOT_IMPLEMENTED
-    )
 }
 
 impl CommandError {

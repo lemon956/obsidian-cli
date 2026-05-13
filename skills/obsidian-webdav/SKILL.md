@@ -1,13 +1,13 @@
 ---
 name: obsidian-webdav
-description: Use webdav-cli to read, search, and create notes in an Obsidian Vault over WebDAV. Trigger when an agent such as Hermes, OpenClaw, Codex, or Claude needs to save knowledge to Obsidian, search Markdown notes, read a note, list Vault directories, validate WebDAV connectivity, or operate on the Vault while only writing to the configured Agent inbox such as Inbox/Hermes.
+description: Use webdav-cli to read, search, and create notes in an Obsidian Vault over WebDAV. Trigger when an agent such as Hermes, OpenClaw, Codex, or Claude needs to save knowledge to Obsidian, search Markdown notes, read a note, list Vault directories, validate WebDAV connectivity, or operate on the Vault while routing full HTTP/WebDAV permissions to the configured Agent inbox such as Inbox/Hermes.
 ---
 
 # Obsidian WebDAV
 
 ## Overview
 
-Use `webdav-cli` as the only interface to the Obsidian Vault. Treat the Vault as broadly readable and narrowly writable: read/list/search anywhere, write only through `new` or `mkdir` inside the configured `allow_write_dirs`, normally `Inbox/Hermes`.
+Use `webdav-cli` as the normal interface to the Obsidian Vault. Treat the Vault as broadly readable, with full HTTP/WebDAV method permissions only under the configured Agent inbox, normally `Inbox/Hermes`. Routine note creation still goes through `new` or `mkdir` inside the configured `allow_write_dirs`.
 
 This skill is portable across Hermes, OpenClaw, Codex, Claude, and similar shell-capable agents. If an agent has a shell tool, call `webdav-cli` directly; if it only supports prompt/tool instructions, embed the rules from this file.
 
@@ -19,7 +19,8 @@ Before using the Vault, verify:
 - The config path is known. Default: `~/.config/webdav-cli/config.yaml`.
 - The password env var named by config, usually `OBSIDIAN_WEBDAV_PASSWORD`, is set in the agent runtime.
 - `webdav.base_url` points at the restricted CLI endpoint, commonly `/obsidian-webdav/`, not the full Obsidian client endpoint unless the user explicitly intends that.
-- `behavior.allow_write_dirs` contains the only write targets, usually `Inbox/Hermes`.
+- `behavior.allow_write_dirs` contains the only CLI write targets, usually `Inbox/Hermes`.
+- The server route grants `Inbox/Hermes` full HTTP/WebDAV methods: `GET`, `HEAD`, `OPTIONS`, `PROPFIND`, `PUT`, `MKCOL`, `DELETE`, `MOVE`, `COPY`, `PROPPATCH`, `LOCK`, and `UNLOCK`.
 
 Run this before first use or after server changes:
 
@@ -32,7 +33,7 @@ Use `webdav-cli --config /path/to/config.yaml ...` when the config is not in the
 ## Safety Rules
 
 - Never call raw `curl`, `rclone`, filesystem commands, or direct WebDAV writes to modify the Vault when `webdav-cli` can perform the operation.
-- Never delete, move, rename, copy, overwrite, or sync Vault content. This tool intentionally does not expose normal destructive commands.
+- Never delete, move, rename, copy, overwrite, or sync formal Vault content. The server route may grant full methods under `Inbox/Hermes`, but routine agent work should still use `webdav-cli` commands.
 - Never write to `Notes`, `Projects`, `Daily`, `Index`, `Sources`, `Troubleshooting`, `.obsidian`, or `Attachments`.
 - Do not bypass `allow_write_dirs`; if a requested destination is outside the Agent inbox, create a note in the inbox explaining the desired destination for human review.
 - Do not store WebDAV passwords in prompts, notes, config files, logs, or command arguments. Use the configured environment variable.
@@ -105,7 +106,8 @@ When creating notes:
 - `401 Unauthorized`: verify WebDAV username/password and that Nginx forwards `Authorization`.
 - `404 Not Found: PROPFIND`: verify `webdav.base_url` matches the actual WebDAV root. If root listing shows a vault folder such as `/lemon/`, set `base_url` to `/obsidian-webdav/lemon/` or remap Nginx.
 - `write_not_allowed`: the requested path is outside `allow_write_dirs`; write to the inbox instead.
-- `DELETE is not forbidden`: server permissions are too broad; do not use the tool for writes until the restricted endpoint is fixed.
+- `<dir> lacks full HTTP permissions; missing: ...`: update the server route so `Inbox/Hermes` allows `GET`, `HEAD`, `OPTIONS`, `PROPFIND`, `PUT`, `MKCOL`, `DELETE`, `MOVE`, `COPY`, `PROPPATCH`, `LOCK`, and `UNLOCK`.
+- `<dir> is not readonly`: a formal Vault directory exposes write or destructive methods; fix the restricted endpoint before using it for writes.
 
 ## References
 

@@ -7,6 +7,7 @@
 - 可以读取整个 Obsidian Vault。
 - 可以列目录、读笔记、搜索 Markdown。
 - 默认只能向 `Inbox/Hermes` 写入新笔记。
+- 服务端受限入口需要给 `Inbox/Hermes` 完整 HTTP/WebDAV 方法权限。
 - 默认不覆盖、不删除、不移动、不重命名正式笔记。
 - 生成带 YAML frontmatter 的 Obsidian Markdown。
 
@@ -102,7 +103,7 @@ webdav-cli mkdir -p Inbox/Hermes/debug/deep
 
 `mkdir -p` 只会从允许写入目录内部开始逐级创建，不会尝试创建或修改 `Inbox` 这类上级目录。
 
-`doctor` 会检查配置、WebDAV 连接、根目录读取、默认写入目录存在、默认写入目录可写、正式目录只读，以及服务端是否禁止 `DELETE`。如需跳过写入探测：
+`doctor` 会检查配置、WebDAV 连接、根目录读取、默认写入目录存在、`Inbox/Hermes` 完整 HTTP/WebDAV 方法权限、默认写入目录可写，以及正式目录只读。如需跳过写入探测：
 
 ```bash
 webdav-cli doctor --no-write-test

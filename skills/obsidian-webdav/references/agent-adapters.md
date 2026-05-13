@@ -27,6 +27,8 @@ Runtime environment:
 export OBSIDIAN_WEBDAV_PASSWORD='your-webdav-password'
 ```
 
+The restricted server route must grant full HTTP/WebDAV methods under `Inbox/Hermes`: `GET`, `HEAD`, `OPTIONS`, `PROPFIND`, `PUT`, `MKCOL`, `DELETE`, `MOVE`, `COPY`, `PROPPATCH`, `LOCK`, and `UNLOCK`. Formal Vault directories should remain read-only through the restricted endpoint.
+
 If the WebDAV root contains a vault folder, include that folder in `base_url`, for example:
 
 ```yaml
@@ -39,7 +41,7 @@ webdav:
 Put the core rules from `SKILL.md` into Hermes tool instructions or a Hermes skill:
 
 ```text
-Use webdav-cli for Obsidian. Read/search anywhere. Write only with `webdav-cli new` or `webdav-cli mkdir` under Inbox/Hermes. Do not delete, move, rename, overwrite, sync, or call raw WebDAV writes. Use OBSIDIAN_WEBDAV_PASSWORD from the runtime environment.
+Use webdav-cli for Obsidian. Read/search anywhere. The /obsidian-webdav/Inbox/Hermes/ route has full HTTP/WebDAV permissions; routine note creation should use `webdav-cli new` or `webdav-cli mkdir` under Inbox/Hermes. Do not modify formal directories or call raw WebDAV writes when webdav-cli can perform the operation. Use OBSIDIAN_WEBDAV_PASSWORD from the runtime environment.
 ```
 
 For systemd-based Hermes, store the password in an environment file and reference it from the service:
@@ -76,7 +78,7 @@ Claude Projects or other Claude-based agents can use this as project instruction
 Recommended Claude instruction:
 
 ```text
-For Obsidian tasks, use webdav-cli only. You may list, read, and search the Vault. You may create notes only in Inbox/Hermes through webdav-cli new. Never delete, move, rename, overwrite, sync, or write outside the configured allow_write_dirs.
+For Obsidian tasks, use webdav-cli only. You may list, read, and search the Vault. The Inbox/Hermes route has full HTTP/WebDAV permissions, but normal note creation should still go through webdav-cli new. Never modify formal directories or write outside the configured allow_write_dirs.
 ```
 
 ## Generic Agent Prompt
@@ -84,5 +86,5 @@ For Obsidian tasks, use webdav-cli only. You may list, read, and search the Vaul
 Use this when an agent does not support formal skills:
 
 ```text
-You have access to Obsidian through webdav-cli. Use it for all Vault access. Commands: doctor, ls, cat, search, new, mkdir. Read/search anywhere. Write only new notes under Inbox/Hermes. Do not delete, move, rename, overwrite, sync, or use raw WebDAV writes. Use Markdown, concise titles, useful tags, and source metadata.
+You have access to Obsidian through webdav-cli. Use it for Vault access. Commands: doctor, ls, cat, search, new, mkdir. Read/search anywhere. The Inbox/Hermes route has full HTTP/WebDAV permissions; routine writes should still be new notes under Inbox/Hermes. Do not modify formal directories or use raw WebDAV writes when webdav-cli can perform the operation. Use Markdown, concise titles, useful tags, and source metadata.
 ```

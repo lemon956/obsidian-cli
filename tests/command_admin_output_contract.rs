@@ -105,17 +105,18 @@ async fn doctor_reports_config_and_read_checks_without_write_probe() {
         .mount(&server)
         .await;
     Mock::given(method("OPTIONS"))
+        .and(path("/webdav/Inbox/Hermes/"))
+        .respond_with(ResponseTemplate::new(204).insert_header(
+            "Allow",
+            "GET, HEAD, OPTIONS, PROPFIND, PUT, MKCOL, DELETE, MOVE, COPY, PROPPATCH, LOCK, UNLOCK",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("OPTIONS"))
         .and(path("/webdav/Notes/"))
         .respond_with(
             ResponseTemplate::new(204).insert_header("Allow", "GET, HEAD, OPTIONS, PROPFIND"),
         )
-        .mount(&server)
-        .await;
-    Mock::given(method("DELETE"))
-        .and(path(
-            "/webdav/Inbox/Hermes/.webdav-cli-doctor-delete-probe.md",
-        ))
-        .respond_with(ResponseTemplate::new(405))
         .mount(&server)
         .await;
 
@@ -130,7 +131,7 @@ async fn doctor_reports_config_and_read_checks_without_write_probe() {
 
     assert_eq!(
         output.message,
-        "[OK] Config loaded\n[OK] WebDAV connected\n[OK] Root vault readable\n[OK] Inbox/Hermes exists\n[OK] Write test skipped\n[OK] Notes directory readonly\n[OK] DELETE forbidden"
+        "[OK] Config loaded\n[OK] WebDAV connected\n[OK] Root vault readable\n[OK] Inbox/Hermes exists\n[OK] Inbox/Hermes full HTTP permissions\n[OK] Write test skipped\n[OK] Notes directory readonly"
     );
 }
 
@@ -164,6 +165,14 @@ async fn doctor_reports_full_write_and_server_safety_checks() {
         ))
         .mount(&server)
         .await;
+    Mock::given(method("OPTIONS"))
+        .and(path("/webdav/Inbox/Hermes/"))
+        .respond_with(ResponseTemplate::new(204).insert_header(
+            "Allow",
+            "GET, HEAD, OPTIONS, PROPFIND, PUT, MKCOL, DELETE, MOVE, COPY, PROPPATCH, LOCK, UNLOCK",
+        ))
+        .mount(&server)
+        .await;
     Mock::given(method("PUT"))
         .and(wiremock::matchers::path_regex(
             r"^/webdav/Inbox/Hermes/\.webdav-cli-doctor-write-[0-9]+\.md$",
@@ -178,13 +187,6 @@ async fn doctor_reports_full_write_and_server_safety_checks() {
         )
         .mount(&server)
         .await;
-    Mock::given(method("DELETE"))
-        .and(path(
-            "/webdav/Inbox/Hermes/.webdav-cli-doctor-delete-probe.md",
-        ))
-        .respond_with(ResponseTemplate::new(405))
-        .mount(&server)
-        .await;
 
     let cli = Cli::parse_from([
         "webdav-cli",
@@ -196,7 +198,61 @@ async fn doctor_reports_full_write_and_server_safety_checks() {
 
     assert_eq!(
         output.message,
-        "[OK] Config loaded\n[OK] WebDAV connected\n[OK] Root vault readable\n[OK] Inbox/Hermes exists\n[OK] Inbox/Hermes writable\n[OK] Notes directory readonly\n[OK] DELETE forbidden"
+        "[OK] Config loaded\n[OK] WebDAV connected\n[OK] Root vault readable\n[OK] Inbox/Hermes exists\n[OK] Inbox/Hermes full HTTP permissions\n[OK] Inbox/Hermes writable\n[OK] Notes directory readonly"
+    );
+}
+
+#[tokio::test]
+async fn doctor_rejects_write_directory_missing_full_http_permissions() {
+    let server = MockServer::start().await;
+    let (_dir, config_path) = write_config(&server, "OBSIDIAN_TEST_PASSWORD_DOCTOR_MISSING_METHOD");
+    Mock::given(method("OPTIONS"))
+        .and(path("/webdav/"))
+        .respond_with(
+            ResponseTemplate::new(204).insert_header("Allow", "GET, HEAD, OPTIONS, PROPFIND"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("PROPFIND"))
+        .and(path("/webdav/"))
+        .respond_with(ResponseTemplate::new(207).set_body_string(
+            r#"<d:multistatus xmlns:d="DAV:">
+  <d:response><d:href>/webdav/</d:href></d:response>
+  <d:response><d:href>/webdav/Inbox/</d:href></d:response>
+</d:multistatus>"#,
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("PROPFIND"))
+        .and(path("/webdav/Inbox/Hermes/"))
+        .respond_with(ResponseTemplate::new(207).set_body_string(
+            r#"<d:multistatus xmlns:d="DAV:">
+  <d:response><d:href>/webdav/Inbox/Hermes/</d:href></d:response>
+</d:multistatus>"#,
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("OPTIONS"))
+        .and(path("/webdav/Inbox/Hermes/"))
+        .respond_with(
+            ResponseTemplate::new(204)
+                .insert_header("Allow", "GET, HEAD, OPTIONS, PROPFIND, PUT, MKCOL"),
+        )
+        .mount(&server)
+        .await;
+
+    let cli = Cli::parse_from([
+        "webdav-cli",
+        "--config",
+        config_path.to_str().unwrap(),
+        "doctor",
+        "--no-write-test",
+    ]);
+    let error = run_command(cli, "").await.unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "Inbox/Hermes lacks full HTTP permissions; missing: DELETE, MOVE, COPY, PROPPATCH, LOCK, UNLOCK"
     );
 }
 

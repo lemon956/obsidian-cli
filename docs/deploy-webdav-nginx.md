@@ -6,8 +6,8 @@
 
 ```text
 GET / HEAD / OPTIONS / PROPFIND 允许读取整个 Vault
-PUT / MKCOL 仅允许写入 /Inbox/Hermes/
-DELETE / MOVE / COPY / PROPPATCH / LOCK 默认禁止
+GET / HEAD / OPTIONS / PROPFIND / PUT / MKCOL / DELETE / MOVE / COPY / PROPPATCH / LOCK / UNLOCK 允许 /Inbox/Hermes/
+DELETE / MOVE / COPY / PROPPATCH / LOCK / UNLOCK 在 /Inbox/Hermes/ 之外禁止
 ```
 
 如果 Obsidian 客户端已经直接使用 `/webdav/`，不要把 `/webdav/` 改成上述受限权限，否则会影响 Obsidian 自身的同步、重命名、删除、附件写入等正常功能。推荐做法是：
@@ -49,7 +49,7 @@ sudo chmod -R u+rwX /srv/obsidian/ObsidianVault/Inbox/Hermes
 
 普通静态文件服务不支持完整 WebDAV。Nginx 内置 `ngx_http_dav_module` 主要覆盖 `PUT`、`DELETE`、`MKCOL`、`COPY`、`MOVE`，`PROPFIND` 通常需要额外的 WebDAV 扩展模块，例如 `nginx-dav-ext-module`。
 
-如果你已经有 Nextcloud、Apache WebDAV、rclone serve webdav、Alist 等现成 WebDAV 服务，可以不使用 Nginx；但仍必须满足全库可读、只允许 `Inbox/Hermes` 写入、禁止 `DELETE/MOVE/COPY/PROPPATCH/LOCK` 的权限模型。
+如果你已经有 Nextcloud、Apache WebDAV、rclone serve webdav、Alist 等现成 WebDAV 服务，可以不使用 Nginx；但仍必须满足全库可读、`Inbox/Hermes` 拥有完整 HTTP/WebDAV 方法权限、正式目录只读的权限模型。
 
 部署前确认当前 Nginx 支持 WebDAV 读目录：
 
@@ -65,7 +65,7 @@ nginx -V 2>&1 | grep -E 'dav|nginx-dav-ext-module'
 
 ```nginx
 location ^~ /obsidian-webdav/Inbox/Hermes/ {
-    limit_except GET HEAD OPTIONS PROPFIND PUT MKCOL {
+    limit_except GET HEAD OPTIONS PROPFIND PUT MKCOL DELETE MOVE COPY PROPPATCH LOCK UNLOCK {
         deny all;
     }
 
@@ -79,7 +79,7 @@ location ^~ /obsidian-webdav/Inbox/Hermes/ {
     proxy_set_header Authorization     $http_authorization;
 
     proxy_hide_header Allow;
-    add_header Allow "GET, HEAD, OPTIONS, PROPFIND, PUT, MKCOL" always;
+    add_header Allow "GET, HEAD, OPTIONS, PROPFIND, PUT, MKCOL, DELETE, MOVE, COPY, PROPPATCH, LOCK, UNLOCK" always;
 
     proxy_buffering off;
     proxy_request_buffering off;
@@ -109,7 +109,8 @@ location ^~ /obsidian-webdav/ {
 
 注意：
 
-- 不要开放 `DELETE`、`MOVE`、`COPY`、`PROPPATCH`、`LOCK`。
+- `/obsidian-webdav/Inbox/Hermes/` 要开放完整 HTTP/WebDAV 方法：`GET`、`HEAD`、`OPTIONS`、`PROPFIND`、`PUT`、`MKCOL`、`DELETE`、`MOVE`、`COPY`、`PROPPATCH`、`LOCK`、`UNLOCK`。
+- 不要在 `/obsidian-webdav/Inbox/Hermes/` 之外开放 `PUT`、`MKCOL`、`DELETE`、`MOVE`、`COPY`、`PROPPATCH`、`LOCK`、`UNLOCK`。
 - `/obsidian-webdav/Inbox/Hermes/` 的 location 必须比 `/obsidian-webdav/` 更具体，并放在它前面。
 - `proxy_pass` 后面的 `127.0.0.1:8001` 要替换成你当前 WebDAV 服务的真实监听地址。
 - 如果后端 WebDAV 已经有 Basic Auth，`Authorization` 会透传给后端；如果认证在 Nginx 层完成，可以按你的现有配置保留 `auth_basic`。
@@ -144,10 +145,10 @@ webdav-cli ls
 webdav-cli new --title "WebDAV 验证" --body "hello"
 ```
 
-`doctor` 会发起 `OPTIONS`、`PROPFIND`、`PUT` 和固定探测路径的 `DELETE` 请求。正常配置下，`DELETE` 应返回 `403`、`405` 或 `501`，并显示：
+`doctor` 会发起 `OPTIONS`、`PROPFIND` 和 `PUT` 探测，并校验 `Inbox/Hermes` 的 `Allow` 方法集合包含完整 HTTP/WebDAV 权限。正常配置下应显示：
 
 ```text
-[OK] DELETE forbidden
+[OK] Inbox/Hermes full HTTP permissions
 ```
 
 安全验收：

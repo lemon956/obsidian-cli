@@ -46,7 +46,7 @@ webdav-cli init \
   --write-dir "Inbox/Hermes"
 ```
 
-如果 Obsidian 客户端已经直接使用服务端的 `/webdav/`，Hermes 端的 `webdav-cli` 建议配置为 `/obsidian-webdav/`。这样可以让 Obsidian 保持完整 WebDAV 功能，同时让 Agent 只经过受限入口。
+如果 Obsidian 客户端已经直接使用服务端的 `/webdav/`，Hermes 端的 `webdav-cli` 建议配置为 `/obsidian-webdav/`。这样可以让 Obsidian 保持完整 WebDAV 功能，同时让 Agent 经过只限制正式目录的入口；该入口应给 `Inbox/Hermes` 完整 HTTP/WebDAV 方法权限。
 
 设置密码环境变量：
 
@@ -75,7 +75,7 @@ EnvironmentFile=/etc/hermes/webdav-cli.env
 webdav-cli doctor
 ```
 
-`doctor` 会检查配置、WebDAV 连接、根目录读取、默认写入目录存在、默认写入目录可写、正式目录只读，以及服务端是否禁止 `DELETE`。
+`doctor` 会检查配置、WebDAV 连接、根目录读取、默认写入目录存在、`Inbox/Hermes` 完整 HTTP/WebDAV 方法权限、默认写入目录可写，以及正式目录只读。
 
 如果只想跳过写入探测：
 
@@ -90,9 +90,9 @@ webdav-cli doctor --no-write-test
 [OK] WebDAV connected
 [OK] Root vault readable
 [OK] Inbox/Hermes exists
+[OK] Inbox/Hermes full HTTP permissions
 [OK] Inbox/Hermes writable
 [OK] Notes directory readonly
-[OK] DELETE forbidden
 ```
 
 ## 4. Hermes 调用示例
