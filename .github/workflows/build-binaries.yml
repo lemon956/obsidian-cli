@@ -44,6 +44,11 @@ jobs:
         with:
           components: rustfmt,clippy
 
+      - name: Sync package version from tag
+        if: github.event_name == 'create' && github.event.ref_type == 'tag' && startsWith(github.event.ref, 'v')
+        shell: bash
+        run: scripts/sync-version-from-tag.sh "${{ github.event.ref }}"
+
       - name: Check formatting
         run: cargo fmt --check
 
